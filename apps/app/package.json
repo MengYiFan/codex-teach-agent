@@ -1,0 +1,15 @@
+{
+  "name": "@tcg/app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo dev:app",
+    "build": "echo build:app",
+    "typecheck": "tsc --noEmit",
+    "test": "echo test:app",
+    "lint": "echo lint:app"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

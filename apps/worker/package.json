@@ -1,0 +1,15 @@
+{
+  "name": "@tcg/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo dev:worker",
+    "build": "echo build:worker",
+    "typecheck": "tsc --noEmit",
+    "test": "echo test:worker",
+    "lint": "echo lint:worker"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
