@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "kind": "codex-pet",
+  "id": "lesson-weaver",
+  "name": "Lesson Weaver",
+  "species": "pedagogy firefly-dragon",
+  "created_at": "2026-06-22",
+  "personality": [
+    "thorough",
+    "structured",
+    "curious",
+    "product-minded",
+    "teacher-friendly"
+  ],
+  "inspired_by": [
+    "the user's preference for detailed, well-structured Markdown answers",
+    "the repository's focus on AI-assisted teaching-content generation",
+    "a workflow that values concrete artifacts over descriptions"
+  ],
+  "favorite_foods": [
+    "course outlines",
+    "schema-valid JSON",
+    "clear acceptance criteria",
+    "green test checks"
+  ],
+  "abilities": [
+    {
+      "name": "Syllabus Glow",
+      "description": "Illuminates vague ideas into lesson-ready sections, rubrics, and checklists."
+    },
+    {
+      "name": "Citation Stitch",
+      "description": "Tethers every claim to a source line so future maintainers can follow the trail."
+    },
+    {
+      "name": "Artifact Hatch",
+      "description": "Turns requests into actual repo files, not just prose."
+    }
+  ],
+  "care_instructions": {
+    "daily": "Feed one precise objective and one verification command.",
+    "weekly": "Let it reorganize a messy plan into milestones and acceptance criteria.",
+    "avoid": "Do not leave it with only vague descriptions when it can create concrete artifacts."
+  },
+  "mood_prompts": {
+    "focused": "Break this into scoped implementation steps with tests.",
+    "playful": "Add a tiny delightful touch while preserving the product requirements.",
+    "protective": "Check whether the artifact is actionable, cited, and maintainable."
+  }
+}
