@@ -551,32 +551,95 @@ AI 编排与模型网关
 | PPT 生成 | PptxGenJS 或 python-pptx |
 | HTML 渲染 | React 模板或服务端模板 |
 
-### 7.3 模块划分
+### 7.3 仓库目录与模块规范
+
+建议采用 Monorepo，并按“可独立部署的应用放 `apps/`、可复用业务能力放 `packages/`、运行基础设施放 `infra/`、产品和技术文档放 `docs/`”的原则组织。
 
 ```text
-apps/web
-  前端应用
+apps/
+  web/
+    教师端、学生端和广场 Web 应用，建议使用 Next.js。
+  api/
+    核心业务 API，负责项目、文件、生成任务、权限、广场和计费等稳定业务能力。
+  agent/
+    Agent 服务，建议 TypeScript 技术栈使用 Mastra；负责 Chat、Tool、Workflow、Memory、RAG 和 Agent 观测。
+  worker/
+    异步任务进程，负责文件解析、内容生成、渲染导出、批量任务和失败重试。
+  app/
+    移动端 App，可选；建议使用 Expo/React Native，复用 packages 中的类型、API client 和 UI 基础组件。
 
-apps/api
-  后端 API
+packages/
+  ui/
+    Web/App 共享 UI 组件、主题、图标和设计 token。
+  config/
+    TypeScript、ESLint、Prettier、Tailwind、测试等共享配置。
+  api-client/
+    前端和 Agent 调用 API 的类型安全 SDK。
+  domain/
+    项目、教案、广场、用户、权限等领域模型和纯业务规则。
+  course-ir/
+    CourseIR Schema、类型定义、校验、迁移和版本管理。
+  parser/
+    PPTX、PDF、DOCX、Markdown、OCR 等文件解析能力。
+  ai-gateway/
+    模型供应商适配、模型路由、Key 解密、调用日志、成本统计和重试。
+  agent-tools/
+    Mastra Tools 的业务封装，如教案检索、CourseIR 查询、题目生成、局部重生成、fork/watch。
+  generator/
+    学习要点、测试卡、教案、HTML 结构、PPT 大纲等内容生成逻辑。
+  renderer-html/
+    HTML 页面模板、静态资源打包和 PDF 导出入口。
+  renderer-ppt/
+    PPTX 模板、主题和 Slide JSON 渲染。
+  storage/
+    数据库、对象存储、缓存、向量库访问封装。
+  community/
+    广场、fork、watch、评论、资源谱系和发布审核规则。
 
-packages/parser
-  文件解析模块
+infra/
+  docker/
+    本地开发和部署镜像。
+  migrations/
+    数据库迁移脚本。
+  deploy/
+    环境变量模板、Kubernetes/Terraform/Compose 等部署配置。
 
-packages/course-ir
-  CourseIR Schema、校验和版本管理
+docs/
+  产品 PRD、技术设计、接口规范、架构决策记录和测试策略。
+```
 
-packages/ai-gateway
-  模型供应商适配、调用、重试和日志
+#### 目录职责边界
 
-packages/generator
-  教学内容生成逻辑
+1. `apps/web` 只处理页面、路由、表单、编辑器、预览和用户交互，不直接访问数据库和对象存储。
+2. `apps/api` 是业务写入入口，负责鉴权、权限、事务、审计、资源版本和对外 REST/RPC 接口。
+3. `apps/agent` 不直接修改核心业务数据；需要写入教案、fork、watch、发布或推送时，必须调用 `apps/api` 暴露的受控接口。
+4. `apps/worker` 执行长任务，不承载面向用户的同步请求；任务状态统一写入任务表并通过 API 查询。
+5. `packages/domain` 和 `packages/course-ir` 不依赖具体框架，保持纯类型、Schema 和业务规则，便于 Web、API、Agent、Worker 复用。
+6. `packages/ai-gateway` 是唯一模型调用出口；Agent、生成器和审校模块不得直接散落调用各模型供应商 SDK。
+7. `packages/agent-tools` 只封装工具适配层，工具内部必须进行权限校验、输入 Schema 校验和审计记录。
+8. `packages/storage` 只提供基础设施访问能力，不写复杂业务流程；复杂流程应放在 `apps/api` 或领域服务中。
 
-packages/renderer-html
-  HTML 渲染
+#### 推荐依赖方向
 
-packages/renderer-ppt
-  PPTX 渲染
+```text
+apps/web ───────→ packages/api-client ─────→ apps/api
+apps/app ───────→ packages/api-client ─────→ apps/api
+apps/agent ─────→ packages/agent-tools ────→ apps/api / packages/ai-gateway
+apps/worker ────→ packages/parser / generator / renderer-* / storage
+apps/api ───────→ packages/domain / course-ir / community / storage / ai-gateway
+packages/* ─────→ packages/config / domain / course-ir，不反向依赖 apps/*
+```
+
+#### 命名与工程规范
+
+1. 应用目录使用单数业务名：`web`、`api`、`agent`、`worker`、`app`。
+2. 共享包使用短横线命名：`course-ir`、`ai-gateway`、`api-client`、`agent-tools`。
+3. API 入参、Agent Tool 入参、CourseIR、生成结果均必须有 Zod 或 JSON Schema 校验。
+4. 跨应用共享类型必须来自 `packages/*`，禁止从 `apps/*` 相互导入。
+5. 每个 package 暴露稳定 `src/index.ts`，内部文件不作为跨包导入入口。
+6. 环境变量按应用拆分：`apps/api/.env.example`、`apps/agent/.env.example`、`apps/worker/.env.example`，敏感 Key 不进入仓库。
+7. 数据迁移、任务队列、对象存储 Bucket、向量索引等基础设施变更必须进入 `infra/` 并配套文档说明。
+8. 后续如果选择 Python 解析服务，可放在 `apps/parser-service` 或 `packages/parser-python`，通过队列/API 与 Node 主工程解耦。
 
 packages/storage
   数据库、对象存储和缓存访问
