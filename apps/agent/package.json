@@ -1,0 +1,15 @@
+{
+  "name": "@tcg/agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo dev:agent",
+    "build": "echo build:agent",
+    "typecheck": "tsc --noEmit",
+    "test": "echo test:agent",
+    "lint": "echo lint:agent"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

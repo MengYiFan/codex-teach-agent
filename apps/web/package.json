@@ -1,0 +1,15 @@
+{
+  "name": "@tcg/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "echo dev:web",
+    "build": "echo build:web",
+    "typecheck": "tsc --noEmit",
+    "test": "echo test:web",
+    "lint": "echo lint:web"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
