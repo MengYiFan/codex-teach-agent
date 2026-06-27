@@ -25,6 +25,10 @@
 | `packages/renderer-*` | HTML、PDF、DOCX、PPTX 渲染 |
 | `packages/storage` | 文件存储、对象存储、导出产物 |
 
+## MVP 已选技术栈
+
+MVP 使用 NestJS + Fastify、BullMQ + Redis、PostgreSQL 和 S3 兼容对象存储。详细理由、边界和重新评估条件见 [ADR 0005](../adr/0005-mvp-runtime-and-queue.md)。历史总稿中列出的 FastAPI、Celery、Temporal、Qdrant 等均不是当前 MVP 依赖。
+
 ## 架构原则
 
 1. 教师端只面向用户语言，内部术语不直接暴露。
@@ -32,3 +36,4 @@
 3. 所有长任务必须可查询状态、可重试、可追溯。
 4. 所有生成内容必须关联来源页码、Prompt 版本、模型和内容版本。
 5. Agent 不直接写核心业务表，只通过受控工具和 API 触发动作。
+6. HTTP 契约以 `docs/api/openapi/mvp-a.yaml` 为准，数据库契约以 migration 和数据库 TRD 为准。

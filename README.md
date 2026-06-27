@@ -43,10 +43,9 @@ docs/
 - 业务写入统一经过 `apps/api`，`apps/agent` 和 `apps/worker` 通过受控 API 或队列触发写入。
 - 模型调用统一经 `packages/ai-gateway`，避免供应商 SDK 与 API Key 分散在业务代码中。
 
-
 ## 合并冲突处理约定
 
 - 合并或变基后先运行 `pnpm check:conflicts`，确保仓库中不存在 `<<<<<<<`、`=======`、`>>>>>>>` 等冲突标记。
 - 文档类冲突优先保留最新的目录规范、模块边界和分阶段执行计划，再补齐被另一侧分支新增的业务说明。
 - 工程骨架类冲突优先保留根工作区配置、每个 `apps/*` 与 `packages/*` 的 `package.json`、`tsconfig.json`、`.env.example` 和 `src/index.ts`，避免后续包无法被 workspace 识别。
-- 如果同一模块 README 与执行计划描述不一致，以 `docs/teaching-content-generation-execution-plan.md` 中的模块边界为准，并回填 README。
+- 如果代码 README 与产品/技术文档描述不一致，以 `docs/README.md` 指向的分层文档和已接受 ADR 为准，并回填模块 README。`docs/teaching-content-generation-execution-plan.md` 是历史归档，不再作为规范来源。

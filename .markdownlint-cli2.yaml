@@ -1,0 +1,5 @@
+config:
+  line-length: false
+
+ignores:
+  - docs/teaching-content-generation-execution-plan.md

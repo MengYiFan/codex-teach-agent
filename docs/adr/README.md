@@ -6,3 +6,4 @@
 - [ADR 0002：CourseIR 作为内部中心模型](0002-course-ir-as-central-model.md)
 - [ADR 0003：采用模板渲染而非模型直接生成最终文件](0003-template-rendering-over-direct-generation.md)
 - [ADR 0004：AI Gateway 作为唯一模型调用出口](0004-ai-gateway-as-single-model-entry.md)
+- [ADR 0005：MVP 主运行时、API 与任务队列技术栈](0005-mvp-runtime-and-queue.md)

@@ -1,3 +1,21 @@
-# docs/api
+# API 契约
 
-接口规范、OpenAPI 说明和 API 变更记录。
+## 当前规范
+
+- [MVP-A OpenAPI 3.1](openapi/mvp-a.yaml)
+- [API 与数据契约说明](../technical/trd-api-and-data-contracts.md)
+- [快速生成状态机](../technical/trd-quick-start-state-machine.md)
+
+## 维护规则
+
+1. OpenAPI 是 HTTP 请求/响应的机器可读来源；接口实现、生成客户端和契约测试均以它为准。
+2. 增删字段、状态、错误码或权限时，同一个变更必须更新 OpenAPI、TRD、契约测试和变更记录。
+3. 破坏性变更需要新 API 主版本；同一主版本只允许增加可选字段、枚举值或新端点。
+4. OpenAPI 校验、生成客户端和示例请求必须进入 CI。
+5. MVP-B 分享、机构管理和后期生态分别维护独立契约，不提前混入 MVP-A。
+
+## 变更记录
+
+| 日期 | 版本 | 说明 |
+| --- | --- | --- |
+| 2026-06-27 | `0.1.0` | 补齐快速生成、内容块版本、审核、导出、错误和幂等契约。 |

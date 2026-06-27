@@ -49,12 +49,16 @@ infra/
 ## 推荐依赖方向
 
 ```text
-apps/web ───────→ packages/api-client ─────→ apps/api
-apps/agent ─────→ packages/agent-tools ────→ apps/api
+apps/web ───────→ packages/api-client ──HTTP──→ apps/api
+apps/agent ─────→ packages/agent-tools ──HTTP─→ apps/api
 apps/worker ────→ packages/parser/generator/renderer/storage
 packages/generator ─→ packages/course-ir + packages/ai-gateway
 packages/renderer-* ─→ packages/course-ir + packages/domain
 ```
+
+图中的 `HTTP` 表示运行时调用，不表示 `packages/api-client` 在构建期依赖 `apps/api`。客户端代码从 OpenAPI 生成。
+
+Worker 只允许直接写入任务状态、解析结果、CourseIR/内容版本、导出记录等任务产物；创建项目、修改权限、发布、分享和覆盖用户确认版本必须经过 API。所有 Worker 写入均需幂等并记录 `task_id`。
 
 ## 模块标准交付清单
 

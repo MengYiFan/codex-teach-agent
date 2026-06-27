@@ -11,3 +11,7 @@
 | 生成任务 | 解析、生成、渲染等耗时任务的后台执行记录 | generation_tasks |
 | 审核状态 | 内容是否已被教师确认或发布 | review_status |
 | 版本 | 每次生成、编辑或重写后保存的可追溯记录 | content version |
+| 快速生成会话 | 收集用途、文件/文本来源并展示生成进度的临时会话 | quick_start_session |
+| 风险项 | 需要教师确认或系统修复的来源、置信度、题目结构问题 | review_finding |
+| 导出清单 | 一次导出固定使用的输出及内容块版本集合 | output_manifest |
+| 幂等键 | 防止重复点击或网络重试创建重复项目/任务的请求标识 | Idempotency-Key |

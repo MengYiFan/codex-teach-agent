@@ -10,8 +10,9 @@
 | --- | --- | --- |
 | `provider_type` | 是 | openai_compatible、azure_openai、anthropic、gemini、local 等 |
 | `display_name` | 是 | 管理员可识别名称 |
-| `base_url` | 是 | 模型服务地址 |
-| `api_key` | 是 | 加密存储 |
+| `base_url` | 条件必填 | `openai_compatible`、私有化和自定义 Azure endpoint 必填；使用供应商默认端点时可空 |
+| `auth_type` | 是 | `api_key`、`workload_identity` 或 `none` |
+| `api_key` | 条件必填 | `auth_type=api_key` 时必填并加密；本地模型或工作负载身份不要求 |
 | `model_name` | 是 | 实际调用模型名称 |
 | `capability` | 是 | 文本、视觉、嵌入、JSON、函数调用等能力 |
 | `is_default` | 否 | 是否默认模型 |
@@ -23,6 +24,8 @@
 3. 调用时临时解密。
 4. 日志不能记录完整敏感 Key。
 5. 支持删除、禁用和连通性测试。
+6. 密文必须记录密钥版本，支持轮换；数据库和日志不能保存可用的明文凭据。
+7. 连通性测试使用最小请求，不携带教师课件或学生数据。
 
 ## AI Gateway 职责
 
@@ -31,6 +34,7 @@
 3. 统一记录 prompt_key、prompt_version、模型、token、成本、延迟和失败原因。
 4. 统一进行日志脱敏和审计。
 5. 为机构版提供模型池、额度限制和成本统计基础。
+6. 在发送外部模型前执行数据策略：敏感数据检测、必要脱敏、供应商允许列表和调用目的记录。
 
 ## 模型路由建议
 
