@@ -24,7 +24,7 @@
 ```text
 访问首页
   → 查看示例
-  → 上传课件
+  → 上传课件或提交文本需求
   → 生成成功
   → 首次预览
   → 局部重写
@@ -46,4 +46,4 @@
 | 学生自测完成率 | 持续提升 |
 | 第二次复用率 | 持续提升 |
 
-“持续提升”指标必须在首个真实用户月建立基线，此后按月报告绝对值和样本量；在没有基线前不作为发布门禁。指标事件、窗口和去重方式见 [埋点事件字典](../reference/event-tracking-dictionary.md)，质量与性能定义见 [MVP-A 测试与验收规范](../testing/mvp-a-acceptance.md)。
+“持续提升”指标必须在首个真实用户月建立基线，此后按月报告绝对值和样本量；在没有基线前不作为发布门禁。指标事件见 [埋点事件字典](../reference/event-tracking-dictionary.md)，分母、窗口和去重方式见 [指标、埋点与质量反馈 TRD](../technical/trd-analytics-and-metrics.md)，质量与性能门禁见 [MVP-A 测试与验收规范](../testing/mvp-a-acceptance.md)。

@@ -24,7 +24,7 @@ packages/
   ai-gateway/     模型供应商适配、路由、Key、日志、成本、重试
   agent-tools/    Agent Tools 的业务封装
   generator/      学习要点、测试卡、教案、HTML/PPT JSON 生成逻辑
-  renderer-html/  HTML 页面模板、静态资源和 PDF 导出入口
+  renderer-html/  Document AST、HTML 在线预览及 PDF/DOCX/Markdown 模板与导出 adapter
   renderer-ppt/   PPTX 模板、主题、Slide JSON 渲染
   storage/        数据库、对象存储、缓存、向量库访问封装
   community/      广场、复制、关注、评论、谱系、发布审核规则
@@ -59,6 +59,10 @@ packages/renderer-* ─→ packages/course-ir + packages/domain
 图中的 `HTTP` 表示运行时调用，不表示 `packages/api-client` 在构建期依赖 `apps/api`。客户端代码从 OpenAPI 生成。
 
 Worker 只允许直接写入任务状态、解析结果、CourseIR/内容版本、导出记录等任务产物；创建项目、修改权限、发布、分享和覆盖用户确认版本必须经过 API。所有 Worker 写入均需幂等并记录 `task_id`。
+
+MVP-A 文档导出统一由 `renderer-html` 维护 Document AST、转义和模板版本；包名沿用现有仓库结构，禁止在 Worker 内另建无版本模板。PPT renderer 不进入 MVP-A 运行依赖。
+
+`apps/agent`、`apps/app`、`packages/community` 和向量检索代码在 MVP-A 仅可保留无运行依赖的骨架，不进入部署清单、数据库 migration、启动链路或 MVP-A 端到端测试依赖。启用前按对应阶段提交独立 ADR/契约。
 
 ## 模块标准交付清单
 

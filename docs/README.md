@@ -31,6 +31,7 @@
 - [模型配置与 AI Gateway TRD](technical/trd-model-configuration.md)
 - [教案广场与 Agent 后期能力 TRD](technical/trd-community-and-agent.md)
 - [安全合规与测试策略 TRD](technical/trd-security-and-testing.md)
+- [指标、埋点与质量反馈 TRD](technical/trd-analytics-and-metrics.md)
 
 ## 项目管理 / 测试必读
 

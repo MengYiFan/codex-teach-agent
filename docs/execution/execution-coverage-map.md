@@ -25,7 +25,7 @@
 | 10 AI 编排设计 | `technical/trd-ai-orchestration-and-rendering.md`、`technical/trd-community-and-agent.md` | 模型调用原则、路由、Prompt、Agent。 |
 | 11 渲染导出设计 | `technical/trd-ai-orchestration-and-rendering.md`、`technical/trd-output-generation.md` | HTML/PPTX/PDF/DOCX 渲染原则。 |
 | 12 安全权限合规 | `technical/trd-security-and-testing.md` | 文件、Key、内容、版权、学生数据。 |
-| 13 测试策略 / 质量评估 | `technical/trd-security-and-testing.md`、`reference/content-quality-rubric.md`、`testing/mvp-a-acceptance.md` | 测试类型、评分标准、数据集和性能口径。 |
+| 13 测试策略 / 质量评估 | `technical/trd-security-and-testing.md`、`technical/trd-analytics-and-metrics.md`、`reference/content-quality-rubric.md`、`testing/mvp-a-acceptance.md` | 测试类型、评分标准、数据集、事件与性能口径。 |
 | 14 里程碑 | `execution/execution-roadmap.md` | 阶段 0-4。 |
 | 15 验收清单 | `execution/execution-acceptance-and-risks.md` | MVP-A、MVP-B、技术验收。 |
 | 16 风险与应对 | `execution/execution-acceptance-and-risks.md` | 范围、术语、质量、成本、权限风险。 |

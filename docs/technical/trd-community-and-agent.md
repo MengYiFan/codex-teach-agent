@@ -25,7 +25,7 @@
 
 1. TypeScript/Node 主工程优先使用 Mastra；Python 主工程可考虑 LangGraph 或 LlamaIndex Workflows。
 2. Mastra 负责 Agent、Tool、Workflow、Memory 和观测；业务侧仍保留 AI Gateway 作为模型配置、Key 管理、审计和成本统计入口。
-3. MVP 默认向量检索使用 PostgreSQL + pgvector；机构版可扩展到 Qdrant 或 Milvus。
+3. 后期首次引入 Agent/RAG 时，默认复用 PostgreSQL + pgvector；MVP-A 不启用向量检索，达到已测量容量瓶颈后才评估 Qdrant 或 Milvus。
 4. 教案检索、CourseIR 查询、题目生成、局部重写、版本保存、权限校验封装为 Tool。
 5. 短期记忆存储在 Redis 或数据库会话表，长期记忆只沉淀经用户确认的教学偏好和高质量内容。
 

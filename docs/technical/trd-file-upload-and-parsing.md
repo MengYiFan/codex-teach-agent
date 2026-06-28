@@ -69,6 +69,8 @@
 
 `page_index` 从 1 开始。每个 block 还应包含稳定 `block_index`；OCR block 必须包含 `confidence`。解析结果必须携带 `schema_version`，并通过 `packages/parser` 暴露的 Schema 校验。
 
+示例中的 `path` 仅是 Worker 内部对象引用；对外 `GET /files/{id}/parsed-result` 只返回 `asset_id`，不返回 Bucket、object key 或签名 URL。需要预览资源时由独立鉴权下载接口签发短期票据。
+
 ## 降级策略
 
 | 场景 | 处理 |
@@ -76,7 +78,7 @@
 | 不支持格式 | 提示“请另存为 PDF/PPTX 后上传”。 |
 | 扫描件 OCR 置信度低 | 生成结果标记“识别不清”，并提示教师手动补充。 |
 | 图片/表格提取失败 | 保留页码和错误原因，不阻断文本内容生成。 |
-| 部分页面失败 | 返回 partial_success，允许跳过问题页、重新上传或手动补充。 |
+| 部分页面失败 | 记录 page warning，允许跳过问题页、重新上传或手动补充；若所有请求产物仍成功，会话为 `succeeded`，只有至少一个请求产物因此失败时才为 `partial_success`。 |
 | 文件加密或损坏 | 不自动重试，返回 `FILE_UNREADABLE`。 |
 | 恶意文件扫描失败 | 隔离对象，不进入解析；扫描服务瞬时失败可自动重试 2 次。 |
 | 页数超过 200 | 返回校验错误并提示拆分文件。 |

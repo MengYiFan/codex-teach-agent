@@ -8,9 +8,9 @@
 apps/
   web/      教师端、学生端、教案广场与 Chat UI Web 应用
   api/      核心业务 API：项目、文件、任务、输出、广场、权限与审计
-  agent/    Mastra Agent 服务：Chat、Tool、Workflow、Memory、RAG 与观测
+  agent/    后期 Mastra Agent 服务骨架；MVP-A 不部署
   worker/   异步任务进程：解析、生成、渲染、导出、通知与重试
-  app/      移动端 App：学生复习、watch 通知与轻量 Chat
+  app/      后期移动端 App 骨架；MVP-A 不部署
 packages/
   ui/             共享 UI、主题、图标与设计 token
   config/         TypeScript、Lint、格式化、测试和构建共享配置
@@ -21,10 +21,10 @@ packages/
   ai-gateway/     模型供应商适配、路由、Key 管理、审计和成本统计
   agent-tools/    Mastra Tools 业务封装与权限/审计适配
   generator/      学习要点、测试卡、教案、HTML/PPT 结构生成
-  renderer-html/  HTML 页面模板、静态打包与 PDF 导出入口
+  renderer-html/  Document AST、HTML 在线预览与 PDF/DOCX/Markdown 导出入口
   renderer-ppt/   PPTX 模板、主题与 Slide JSON 渲染
   storage/        PostgreSQL、Redis、S3/MinIO、pgvector 访问封装
-  community/      教案广场、fork/watch、评论、谱系与发布审核规则
+  community/      后期教案广场、fork/watch、评论、谱系与发布审核规则
 infra/
   docker/      本地开发与镜像配置
   migrations/  数据库迁移脚本

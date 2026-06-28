@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Teaching Content Generation MVP-A API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     MVP-A 的机器可读 HTTP 契约。所有时间均为 UTC RFC 3339，所有资源 ID 均为 UUID。
   license:
@@ -26,6 +26,8 @@ tags:
     description: 风险项和教师确认
   - name: Exports
     description: 固定版本清单的文档导出
+  - name: Analytics
+    description: 质量反馈和受控客户端埋点
   - name: ModelAdmin
     description: 仅模型管理员可用的供应商与模型配置
 
@@ -44,6 +46,8 @@ paths:
       responses:
         '201':
           description: 会话已创建
+          headers: &standardResponseHeaders
+            X-Request-Id: { $ref: '#/components/headers/XRequestId' }
           content:
             application/json:
               schema:
@@ -61,15 +65,51 @@ paths:
       responses:
         '200':
           description: 当前状态
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/QuickStartSession'
         '404': { $ref: '#/components/responses/NotFound' }
-
+        '401': { $ref: '#/components/responses/AuthRequired' }
+    patch:
+      tags: [QuickStart]
+      operationId: updateQuickStartSession
+      summary: 在生成前修改用途、输出或文本说明
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateQuickStartSessionRequest' }
+      responses:
+        '200':
+          description: 会话已更新且 context_version 已递增
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QuickStartSession' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /quick-start/sessions/{session_id}/files:
     parameters:
       - $ref: '#/components/parameters/SessionId'
+    get:
+      tags: [QuickStart]
+      operationId: listQuickStartFiles
+      summary: 查询尚未生成的会话文件
+      responses:
+        '200':
+          description: 临时文件列表
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1
+                items: { $ref: '#/components/schemas/ProjectFile' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
     post:
       tags: [QuickStart]
       operationId: uploadQuickStartFile
@@ -88,6 +128,7 @@ paths:
       responses:
         '202':
           description: 已接收并开始安全与格式检查
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
@@ -96,6 +137,8 @@ paths:
         '413': { $ref: '#/components/responses/FileTooLarge' }
         '415': { $ref: '#/components/responses/UnsupportedFileType' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /quick-start/sessions/{session_id}/files/{file_id}:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -105,13 +148,17 @@ paths:
       operationId: deleteQuickStartFile
       summary: 删除尚未生成的临时文件
       responses:
-        '204': { description: 已删除 }
+        '204':
+          description: 已删除
+          headers: *standardResponseHeaders
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /quick-start/sessions/{session_id}/confirm-context:
     parameters:
       - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/IdempotencyKey'
     post:
       tags: [QuickStart]
       operationId: confirmQuickStartContext
@@ -125,12 +172,15 @@ paths:
       responses:
         '200':
           description: 已保存
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/QuickStartSession'
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /quick-start/sessions/{session_id}/generate:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -153,6 +203,7 @@ paths:
       responses:
         '202':
           description: 已入队
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
@@ -162,6 +213,8 @@ paths:
         '429': { $ref: '#/components/responses/QuotaExceeded' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /quick-start/sessions/{session_id}/cancel:
     parameters:
       - $ref: '#/components/parameters/SessionId'
@@ -173,12 +226,39 @@ paths:
       responses:
         '202':
           description: 已接受取消请求
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/QuickStartSession'
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /quick-start/sessions/{session_id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/SessionId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [QuickStart]
+      operationId: retryQuickStartFailures
+      summary: 为最近一轮的可恢复失败创建新 generation run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetryQuickStartRequest' }
+      responses:
+        '202':
+          description: 重试 run 已创建
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerationAccepted' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /projects:
     get:
       tags: [Projects]
@@ -190,6 +270,7 @@ paths:
       responses:
         '200':
           description: 项目列表
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
@@ -206,42 +287,92 @@ paths:
       responses:
         '200':
           description: 项目详情
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Project' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
     patch:
       tags: [Projects]
       operationId: updateProject
-      summary: 更新项目元数据
+      summary: 以乐观锁更新项目标题
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              minProperties: 1
-              properties:
-                title: { type: string, minLength: 1, maxLength: 255 }
-                subject: { type: [string, 'null'], maxLength: 100 }
-                grade: { type: [string, 'null'], maxLength: 100 }
-                duration_minutes: { type: [integer, 'null'], minimum: 5, maximum: 480 }
-                student_level: { $ref: '#/components/schemas/NullableStudentLevel' }
+              $ref: '#/components/schemas/UpdateProjectRequest'
       responses:
         '200':
           description: 已更新
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Project' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
     delete:
       tags: [Projects]
       operationId: deleteProject
       summary: 软删除项目并安排数据清理
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
-        '204': { description: 已软删除并排队清理 }
+        '202':
+          description: 已软删除并排队清理
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionOperation' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+  /projects/{project_id}/confirm-context:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Projects]
+      operationId: confirmProjectContext
+      summary: 版本化确认项目上下文并可选创建重生成 run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmContextRequest' }
+      responses:
+        '200':
+          description: 上下文已更新
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectContextUpdateResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
+  /deletion-operations/{operation_id}:
+    parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Projects]
+      operationId: getDeletionOperation
+      summary: 查询项目数据清理状态
+      responses:
+        '200':
+          description: 删除操作状态
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeletionOperation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /projects/{project_id}/tasks:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -249,16 +380,59 @@ paths:
       tags: [Tasks]
       operationId: listProjectTasks
       summary: 查询项目任务
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 任务列表
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/GenerationTask' }
+              schema: { $ref: '#/components/schemas/GenerationTaskPage' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/generation-runs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Tasks]
+      operationId: listProjectGenerationRuns
+      summary: 查询项目初次生成和显式重生成历史
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: generation run 列表
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerationRunPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
+  /generation-runs/{run_id}:
+    parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Tasks]
+      operationId: getGenerationRun
+      summary: 查询 generation run 聚合结果
+      responses:
+        '200':
+          description: generation run
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GenerationRun' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /projects/{project_id}/files:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -269,13 +443,36 @@ paths:
       responses:
         '200':
           description: 项目文件列表
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
                 type: array
+                maxItems: 1
                 items: { $ref: '#/components/schemas/ProjectFile' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/text-sources:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      tags: [Projects]
+      operationId: listProjectTextSources
+      summary: 查询项目文本来源元数据
+      responses:
+        '200':
+          description: 文本来源列表；不返回完整正文
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1
+                items: { $ref: '#/components/schemas/ProjectTextSource' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /files/{file_id}/parsed-result:
     parameters:
       - $ref: '#/components/parameters/FileId'
@@ -286,12 +483,34 @@ paths:
       responses:
         '200':
           description: 结构化解析结果
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ParsedContent' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+  /assets/{asset_id}/download:
+    parameters:
+      - name: asset_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Projects]
+      operationId: downloadProjectAsset
+      summary: 获取解析资源的短期下载票据
+      responses:
+        '200':
+          description: 下载票据
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DownloadTicket' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /tasks/{task_id}:
     parameters:
       - $ref: '#/components/parameters/TaskId'
@@ -302,11 +521,13 @@ paths:
       responses:
         '200':
           description: 任务状态
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GenerationTask' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /tasks/{task_id}/retry:
     parameters:
       - $ref: '#/components/parameters/TaskId'
@@ -314,15 +535,38 @@ paths:
     post:
       tags: [Tasks]
       operationId: retryTask
-      summary: 为失败任务创建新的执行 attempt
+      summary: 为独立失败任务创建引用原任务的后继任务
       responses:
         '202':
-          description: 已创建新 attempt
+          description: 已创建后继任务
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GenerationTask' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+  /tasks/{task_id}/attempts:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [Tasks]
+      operationId: listTaskAttempts
+      summary: 查询逻辑任务的不可变执行 attempt
+      responses:
+        '200':
+          description: attempt 列表
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 5
+                items: { $ref: '#/components/schemas/GenerationTaskAttempt' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /tasks/{task_id}/cancel:
     parameters:
       - $ref: '#/components/parameters/TaskId'
@@ -334,11 +578,14 @@ paths:
       responses:
         '202':
           description: 已接受
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GenerationTask' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /projects/{project_id}/outputs:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -349,13 +596,16 @@ paths:
       responses:
         '200':
           description: 输出列表
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
                 type: array
+                maxItems: 4
                 items: { $ref: '#/components/schemas/GeneratedOutput' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
   /outputs/{output_id}:
     parameters:
       - $ref: '#/components/parameters/OutputId'
@@ -366,11 +616,14 @@ paths:
       responses:
         '200':
           description: 输出详情
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GeneratedOutput' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /outputs/{output_id}/versions:
     parameters:
       - $ref: '#/components/parameters/OutputId'
@@ -378,16 +631,19 @@ paths:
       tags: [Outputs]
       operationId: listOutputVersions
       summary: 查询整份输出版本
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 版本列表
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/OutputVersion' }
+              schema: { $ref: '#/components/schemas/OutputVersionPage' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
   /outputs/{output_id}/versions/{version}/restore:
     parameters:
       - $ref: '#/components/parameters/OutputId'
@@ -400,14 +656,22 @@ paths:
       tags: [Outputs]
       operationId: restoreOutputVersion
       summary: 从历史快照创建新的当前版本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RestoreVersionRequest' }
       responses:
         '201':
           description: 已从历史版本创建新版本
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OutputVersion' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /outputs/{output_id}/blocks:
     parameters:
       - $ref: '#/components/parameters/OutputId'
@@ -415,16 +679,19 @@ paths:
       tags: [ContentBlocks]
       operationId: listOutputBlocks
       summary: 查询输出的当前内容块
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 内容块列表
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ContentBlock' }
+              schema: { $ref: '#/components/schemas/ContentBlockPage' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
   /content-blocks/{block_id}:
     parameters:
       - $ref: '#/components/parameters/BlockId'
@@ -435,10 +702,12 @@ paths:
       responses:
         '200':
           description: 内容块
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ContentBlock' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
     patch:
       tags: [ContentBlocks]
       operationId: updateContentBlock
@@ -451,11 +720,34 @@ paths:
       responses:
         '201':
           description: 已创建新版本
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ContentBlock' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [ContentBlocks]
+      operationId: deleteContentBlock
+      summary: 以 tombstone 新版本删除当前内容块
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: expected_version
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: 已创建 tombstone 和新的整份输出版本
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OutputVersion' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /content-blocks/{block_id}/regenerate:
     parameters:
       - $ref: '#/components/parameters/BlockId'
@@ -472,11 +764,14 @@ paths:
       responses:
         '202':
           description: 重写任务已创建
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GenerationTask' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /content-blocks/{block_id}/versions:
     parameters:
       - $ref: '#/components/parameters/BlockId'
@@ -484,16 +779,47 @@ paths:
       tags: [ContentBlocks]
       operationId: listContentBlockVersions
       summary: 查询内容块版本历史
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 内容块版本
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ContentBlockVersion' }
+              schema: { $ref: '#/components/schemas/ContentBlockVersionPage' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
+  /content-blocks/{block_id}/versions/{version}/restore:
+    parameters:
+      - $ref: '#/components/parameters/BlockId'
+      - name: version
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [ContentBlocks]
+      operationId: restoreContentBlockVersion
+      summary: 复制历史内容并创建新的未审核版本
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RestoreVersionRequest' }
+      responses:
+        '201':
+          description: 已创建恢复版本
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ContentBlock' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /content-blocks/{block_id}/confirm:
     parameters:
       - $ref: '#/components/parameters/BlockId'
@@ -512,13 +838,16 @@ paths:
               properties:
                 expected_version: { type: integer, minimum: 1 }
       responses:
-        '200':
-          description: 已确认
+        '201':
+          description: 已创建确认版本
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ContentBlock' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /projects/{project_id}/review-findings:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -530,16 +859,21 @@ paths:
         - name: status
           in: query
           schema: { $ref: '#/components/schemas/ReviewFindingStatus' }
+        - name: include_superseded
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 风险项列表
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ReviewFinding' }
+              schema: { $ref: '#/components/schemas/ReviewFindingPage' }
         '401': { $ref: '#/components/responses/AuthRequired' }
 
+        '404': { $ref: '#/components/responses/NotFound' }
   /review-findings/{finding_id}/resolve:
     parameters:
       - name: finding_id
@@ -559,11 +893,63 @@ paths:
       responses:
         '200':
           description: 已处理
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ReviewFinding' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/quality-feedback:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Analytics]
+      operationId: submitQualityFeedback
+      summary: 对明确输出版本清单提交可用性反馈
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QualityFeedbackRequest' }
+      responses:
+        '201':
+          description: 反馈已保存
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QualityFeedback' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
+  /events/batch:
+    post:
+      tags: [Analytics]
+      operationId: ingestClientEvents
+      summary: 批量接收白名单客户端 UI 事件
+      security:
+        - {}
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientEventBatch' }
+      responses:
+        '202':
+          description: 事件已接收或按 event_id 去重
+          headers: *standardResponseHeaders
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventBatchAccepted' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/QuotaExceeded' }
+
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /projects/{project_id}/exports:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -580,11 +966,14 @@ paths:
       responses:
         '202':
           description: 导出任务已创建
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Export' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /exports/{export_id}:
     parameters:
       - $ref: '#/components/parameters/ExportId'
@@ -595,11 +984,13 @@ paths:
       responses:
         '200':
           description: 导出状态
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Export' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /exports/{export_id}/download:
     parameters:
       - $ref: '#/components/parameters/ExportId'
@@ -610,30 +1001,37 @@ paths:
       responses:
         '200':
           description: 下载票据
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DownloadTicket' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /admin/model-providers:
     get:
       tags: [ModelAdmin]
       operationId: listModelProviders
       summary: 查询模型供应商配置
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 供应商配置列表
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ModelProvider' }
+              schema: { $ref: '#/components/schemas/ModelProviderPage' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
     post:
       tags: [ModelAdmin]
       operationId: createModelProvider
       summary: 创建模型供应商配置
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -642,11 +1040,14 @@ paths:
       responses:
         '201':
           description: 已创建
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ModelProvider' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
   /admin/model-providers/{provider_id}:
     parameters:
       - name: provider_id
@@ -663,27 +1064,44 @@ paths:
           application/json:
             schema:
               type: object
-              minProperties: 1
+              required: [expected_version]
+              minProperties: 2
               properties:
+                expected_version: { type: integer, minimum: 1 }
                 display_name: { type: string, minLength: 1, maxLength: 100 }
-                base_url: { type: [string, 'null'], format: uri }
-                api_key: { type: [string, 'null'], minLength: 8, writeOnly: true }
+                base_url: { type: [string, 'null'], format: uri, pattern: '^https?://', maxLength: 2048 }
+                api_key: { type: string, minLength: 8, writeOnly: true }
                 enabled: { type: boolean }
       responses:
         '200':
           description: 已更新
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ModelProvider' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
     delete:
       tags: [ModelAdmin]
       operationId: deleteModelProvider
       summary: 禁用供应商并删除凭据
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: expected_version
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
       responses:
-        '204': { description: 已禁用并排队删除凭据 }
+        '204':
+          description: 已禁用并排队删除凭据
+          headers: *standardResponseHeaders
         '403': { $ref: '#/components/responses/Forbidden' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/model-providers/{provider_id}/test:
     parameters:
       - name: provider_id
@@ -698,6 +1116,7 @@ paths:
       responses:
         '200':
           description: 连通性结果
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema:
@@ -709,6 +1128,8 @@ paths:
                   message: { type: string }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /admin/model-providers/{provider_id}/models:
     parameters:
       - name: provider_id
@@ -719,19 +1140,25 @@ paths:
       tags: [ModelAdmin]
       operationId: listModelConfigs
       summary: 查询供应商下的模型配置
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: 模型配置列表
+          headers: *standardResponseHeaders
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/ModelConfig' }
+              schema: { $ref: '#/components/schemas/ModelConfigPage' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
       tags: [ModelAdmin]
       operationId: createModelConfig
       summary: 创建模型及能力配置
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -740,11 +1167,15 @@ paths:
       responses:
         '201':
           description: 已创建
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ModelConfig' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/model-configs/{config_id}:
     parameters:
       - name: config_id
@@ -761,8 +1192,10 @@ paths:
           application/json:
             schema:
               type: object
-              minProperties: 1
+              required: [expected_version]
+              minProperties: 2
               properties:
+                expected_version: { type: integer, minimum: 1 }
                 display_name: { type: string, minLength: 1, maxLength: 100 }
                 capability: { type: object, additionalProperties: true }
                 routing_priority: { type: integer, minimum: 1, maximum: 1000 }
@@ -772,24 +1205,45 @@ paths:
       responses:
         '200':
           description: 已更新
+          headers: *standardResponseHeaders
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ModelConfig' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
     delete:
       tags: [ModelAdmin]
       operationId: deleteModelConfig
       summary: 删除模型配置
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: expected_version
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
       responses:
-        '204': { description: 已禁用并删除 }
+        '204':
+          description: 已禁用并删除
+          headers: *standardResponseHeaders
         '403': { $ref: '#/components/responses/Forbidden' }
 
+        '401': { $ref: '#/components/responses/AuthRequired' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  headers:
+    XRequestId:
+      description: 面向调用方的请求关联 ID，不暴露内部拓扑
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 100 }
 
   parameters:
     SessionId:
@@ -844,51 +1298,71 @@ components:
   responses:
     ValidationError:
       description: 请求校验失败
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     AuthRequired:
       description: 需要登录
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     Forbidden:
       description: 无权限
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     NotFound:
       description: 资源不存在或不可见
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     Conflict:
       description: 状态、版本、幂等键或并发冲突
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     FileTooLarge:
       description: 文件超过 50 MiB
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     UnsupportedFileType:
       description: 文件类型不支持
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     SourceRequired:
       description: 缺少有效文件或文本来源
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     QuotaExceeded:
       description: 套餐或速率额度不足
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
     ServiceUnavailable:
       description: 模型或任务队列暂不可用
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/XRequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
@@ -928,17 +1402,31 @@ components:
         - expired
     TaskStatus:
       type: string
-      enum: [queued, running, retrying, succeeded, failed, cancelled]
+      enum: [queued, running, retrying, succeeded, failed, dead_lettered, cancelled]
     ReviewStatus:
       type: string
       enum: [unreviewed, confirmed]
     ReviewFindingStatus:
       type: string
-      enum: [open, confirmed, fixed, dismissed]
+      enum: [open, confirmed, fixed, dismissed, superseded]
     CreateQuickStartSessionRequest:
       type: object
       additionalProperties: false
       required: [intent, source_type]
+      allOf:
+        - if:
+            properties:
+              source_type: { const: file }
+          then:
+            properties:
+              source_text: { type: 'null' }
+        - if:
+            properties:
+              source_type: { enum: [text, file_with_text] }
+          then:
+            required: [source_text]
+            properties:
+              source_text: { type: string, minLength: 10, maxLength: 2000 }
       properties:
         intent: { $ref: '#/components/schemas/Intent' }
         source_type: { $ref: '#/components/schemas/SourceType' }
@@ -949,12 +1437,28 @@ components:
         preferred_outputs:
           type: array
           minItems: 1
+          maxItems: 4
           uniqueItems: true
           items: { $ref: '#/components/schemas/OutputType' }
         optional_context: { $ref: '#/components/schemas/OptionalContext' }
         client_trace_id:
           type: [string, 'null']
           maxLength: 100
+    UpdateQuickStartSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_context_version]
+      minProperties: 2
+      properties:
+        expected_context_version: { type: integer, minimum: 1 }
+        intent: { $ref: '#/components/schemas/Intent' }
+        preferred_outputs:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/OutputType' }
+        source_text: { type: string, minLength: 10, maxLength: 2000 }
     OptionalContext:
       type: object
       additionalProperties: false
@@ -964,6 +1468,11 @@ components:
         duration_minutes: { type: [integer, 'null'], minimum: 5, maximum: 480 }
         student_level: { $ref: '#/components/schemas/NullableStudentLevel' }
         teaching_scenario: { type: [string, 'null'], maxLength: 100 }
+    ContextPatch:
+      allOf:
+        - $ref: '#/components/schemas/OptionalContext'
+        - type: object
+          minProperties: 1
     ContextField:
       type: object
       required: [value, source, confidence, needs_confirmation]
@@ -974,14 +1483,21 @@ components:
           enum: [user, file_metadata, model_inference, product_default]
         confidence: { type: number, minimum: 0, maximum: 1 }
         needs_confirmation: { type: boolean }
+    DetectedContext:
+      type: object
+      additionalProperties: { $ref: '#/components/schemas/ContextField' }
     QuickStartSession:
       type: object
       required:
         - session_id
+        - project_id
+        - active_run_id
+        - latest_run_id
         - status
         - intent
         - source_type
         - preferred_outputs
+        - context_version
         - progress_percent
         - available_outputs
         - warnings
@@ -991,6 +1507,8 @@ components:
       properties:
         session_id: { type: string, format: uuid }
         project_id: { type: [string, 'null'], format: uuid }
+        active_run_id: { type: [string, 'null'], format: uuid }
+        latest_run_id: { type: [string, 'null'], format: uuid }
         status: { $ref: '#/components/schemas/SessionStatus' }
         intent: { $ref: '#/components/schemas/Intent' }
         source_type: { $ref: '#/components/schemas/SourceType' }
@@ -1003,8 +1521,7 @@ components:
         progress_percent: { type: integer, minimum: 0, maximum: 100 }
         context_version: { type: integer, minimum: 1 }
         detected_context:
-          type: object
-          additionalProperties: { $ref: '#/components/schemas/ContextField' }
+          $ref: '#/components/schemas/DetectedContext'
         available_outputs:
           type: array
           items: { $ref: '#/components/schemas/OutputType' }
@@ -1023,6 +1540,11 @@ components:
         message: { type: string }
         file_id: { type: [string, 'null'], format: uuid }
         page_index: { type: [integer, 'null'], minimum: 1 }
+        task_id: { type: [string, 'null'], format: uuid }
+        output_type:
+          oneOf:
+            - $ref: '#/components/schemas/OutputType'
+            - type: 'null'
         retryable: { type: boolean, default: false }
     ConfirmContextRequest:
       type: object
@@ -1033,15 +1555,28 @@ components:
         apply_mode:
           type: string
           enum: [future_only, regenerate_affected]
-        context: { $ref: '#/components/schemas/OptionalContext' }
+        context: { $ref: '#/components/schemas/ContextPatch' }
+    RetryQuickStartRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_context_version, failed_task_ids]
+      properties:
+        expected_context_version: { type: integer, minimum: 1 }
+        failed_task_ids:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, format: uuid }
     GenerationAccepted:
       type: object
-      required: [session_id, project_id, task_id, status]
+      required: [session_id, project_id, run_id, task_id, status, requested_at]
       properties:
         session_id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
+        run_id: { type: string, format: uuid }
         task_id: { type: string, format: uuid }
         status: { type: string, const: queued }
+        requested_at: { type: string, format: date-time }
     ProjectFile:
       type: object
       required: [id, file_name, media_type, file_size_bytes, status, created_at]
@@ -1057,6 +1592,16 @@ components:
         status: { type: string, enum: [uploaded, scanning, ready, rejected, parsing, parse_failed, parsed] }
         page_count: { type: [integer, 'null'], minimum: 1, maximum: 200 }
         created_at: { type: string, format: date-time }
+    ProjectTextSource:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, source_role, character_count, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        source_role: { type: string, enum: [primary, supplement] }
+        character_count: { type: integer, minimum: 10, maximum: 2000 }
+        created_at: { type: string, format: date-time }
     ParsedContent:
       type: object
       additionalProperties: false
@@ -1070,6 +1615,7 @@ components:
           maxItems: 200
           items:
             type: object
+            additionalProperties: false
             required: [page_index, blocks]
             properties:
               page_index: { type: integer, minimum: 1 }
@@ -1078,6 +1624,7 @@ components:
                 type: array
                 items:
                   type: object
+                  additionalProperties: false
                   required: [block_index, type]
                   properties:
                     block_index: { type: integer, minimum: 0 }
@@ -1088,17 +1635,49 @@ components:
               notes: { type: [string, 'null'] }
     Project:
       type: object
-      required: [id, title, status, created_at, updated_at]
+      required: [id, title, title_source, status, version, context_version, detected_context, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         title: { type: string }
+        title_source: { type: string, enum: [placeholder, detected, user] }
         subject: { type: [string, 'null'] }
         grade: { type: [string, 'null'] }
         duration_minutes: { type: [integer, 'null'] }
         student_level: { $ref: '#/components/schemas/NullableStudentLevel' }
-        status: { type: string, enum: [draft, ready, partial, failed, deleted] }
+        status: { type: string, enum: [draft, generating, ready, partial, failed, deleted] }
+        version: { type: integer, minimum: 1 }
+        context_version: { type: integer, minimum: 1 }
+        detected_context:
+          $ref: '#/components/schemas/DetectedContext'
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    UpdateProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      minProperties: 2
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        title: { type: string, minLength: 1, maxLength: 255 }
+    ProjectContextUpdateResult:
+      type: object
+      additionalProperties: false
+      required: [project, regeneration]
+      properties:
+        project: { $ref: '#/components/schemas/Project' }
+        regeneration:
+          oneOf:
+            - $ref: '#/components/schemas/RegenerationAccepted'
+            - type: 'null'
+    RegenerationAccepted:
+      type: object
+      additionalProperties: false
+      required: [run_id, task_id, status, requested_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        status: { type: string, const: queued }
+        requested_at: { type: string, format: date-time }
     ProjectPage:
       type: object
       required: [items, next_cursor]
@@ -1107,27 +1686,101 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Project' }
         next_cursor: { type: [string, 'null'] }
+    GenerationRun:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - project_id
+        - run_kind
+        - context_version
+        - context_snapshot
+        - requested_outputs
+        - status
+        - requested_at
+      properties:
+        id: { type: string, format: uuid }
+        session_id: { type: [string, 'null'], format: uuid }
+        project_id: { type: string, format: uuid }
+        run_kind: { type: string, enum: [initial, retry_failed_outputs, regenerate_context] }
+        retry_of_run_id: { type: [string, 'null'], format: uuid }
+        context_version: { type: integer, minimum: 1 }
+        context_snapshot: { $ref: '#/components/schemas/DetectedContext' }
+        requested_outputs:
+          type: array
+          minItems: 1
+          maxItems: 4
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/OutputType' }
+        status: { type: string, enum: [queued, running, succeeded, partial_success, failed, cancelled] }
+        root_task_id: { type: [string, 'null'], format: uuid }
+        requested_at: { type: string, format: date-time }
+        first_meaningful_output_ready_at: { type: [string, 'null'], format: date-time }
+        settled_at: { type: [string, 'null'], format: date-time }
+    GenerationRunPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/GenerationRun' }
+        next_cursor: { type: [string, 'null'] }
     GenerationTask:
       type: object
       required: [id, project_id, task_type, status, attempt, progress_percent, created_at]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
+        generation_run_id: { type: [string, 'null'], format: uuid }
         parent_task_id: { type: [string, 'null'], format: uuid }
+        retry_of_task_id: { type: [string, 'null'], format: uuid }
         task_type:
           type: string
-          enum: [parse_file, build_course_ir, generate_output, review_quality, regenerate_block, render_export]
+          enum: [generation_run, parse_file, build_course_ir, generate_output, review_quality, regenerate_block, render_export]
+        target_type: { type: [string, 'null'], enum: [content_block, output, export, file, project, null] }
+        target_id: { type: [string, 'null'], format: uuid }
+        output_type:
+          oneOf:
+            - $ref: '#/components/schemas/OutputType'
+            - type: 'null'
         status: { $ref: '#/components/schemas/TaskStatus' }
-        attempt: { type: integer, minimum: 1 }
+        attempt:
+          type: integer
+          minimum: 0
+          description: 已创建的执行 attempt 数；queued 且尚未领取时为 0
+        max_attempts: { type: integer, minimum: 1, maximum: 5 }
         progress_percent: { type: integer, minimum: 0, maximum: 100 }
         current_step: { type: [string, 'null'] }
         error: { oneOf: [{ $ref: '#/components/schemas/ErrorDetail' }, { type: 'null' }] }
         created_at: { type: string, format: date-time }
         started_at: { type: [string, 'null'], format: date-time }
         finished_at: { type: [string, 'null'], format: date-time }
+    GenerationTaskAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, task_id, attempt_number, status, started_at]
+      properties:
+        id: { type: string, format: uuid }
+        task_id: { type: string, format: uuid }
+        attempt_number: { type: integer, minimum: 1 }
+        status: { type: string, enum: [running, succeeded, failed, cancelled] }
+        error: { oneOf: [{ $ref: '#/components/schemas/ErrorDetail' }, { type: 'null' }] }
+        started_at: { type: string, format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+    GenerationTaskPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/GenerationTask' }
+        next_cursor: { type: [string, 'null'] }
     GeneratedOutput:
       type: object
-      required: [id, project_id, output_type, title, current_version, status, created_at, updated_at]
+      required: [id, project_id, output_type, title, current_version, status, review_status, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
@@ -1140,17 +1793,46 @@ components:
         updated_at: { type: string, format: date-time }
     OutputVersion:
       type: object
-      required: [id, output_id, version, course_ir_version_id, created_at]
+      required: [id, output_id, version, course_ir_version_id, schema_version, block_manifest, review_status, created_by_type, generation_task_id, prompt_key, prompt_version, provider_type, model_name, created_at]
       properties:
         id: { type: string, format: uuid }
         output_id: { type: string, format: uuid }
         version: { type: integer, minimum: 1 }
         course_ir_version_id: { type: string, format: uuid }
+        schema_version: { type: string }
+        block_manifest:
+          type: array
+          items: { $ref: '#/components/schemas/BlockVersionReference' }
+        review_status: { $ref: '#/components/schemas/ReviewStatus' }
+        created_by_type: { type: string, enum: [user, model, system, restore] }
+        generation_task_id: { type: [string, 'null'], format: uuid }
+        prompt_key: { type: [string, 'null'] }
+        prompt_version: { type: [string, 'null'] }
+        provider_type: { type: [string, 'null'], enum: [openai_compatible, azure_openai, anthropic, gemini, local, null] }
+        model_name: { type: [string, 'null'] }
         change_summary: { type: [string, 'null'] }
         created_at: { type: string, format: date-time }
+    OutputVersionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OutputVersion' }
+        next_cursor: { type: [string, 'null'] }
+    BlockVersionReference:
+      type: object
+      additionalProperties: false
+      required: [block_id, version_id, version, position]
+      properties:
+        block_id: { type: string, format: uuid }
+        version_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        position: { type: integer, minimum: 0 }
     ContentBlock:
       type: object
-      required: [id, output_id, block_type, position, current_version, review_status, content]
+      required: [id, output_id, stable_key, block_type, position, current_version, review_status, content, source_refs, knowledge_point_ids, reuse_policy]
       properties:
         id: { type: string, format: uuid }
         output_id: { type: string, format: uuid }
@@ -1166,28 +1848,193 @@ components:
         source_refs:
           type: array
           items: { $ref: '#/components/schemas/SourceRef' }
+        knowledge_point_ids:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        reuse_policy: { type: string, enum: [private, project] }
     ContentBlockVersion:
-      allOf:
-        - $ref: '#/components/schemas/ContentBlock'
-        - type: object
-          required: [version_id, created_at, created_by_type]
-          properties:
-            version_id: { type: string, format: uuid }
-            created_at: { type: string, format: date-time }
-            created_by_type: { type: string, enum: [user, model, system, restore] }
-            change_summary: { type: [string, 'null'] }
-    BlockBody:
       type: object
+      additionalProperties: false
+      required:
+        - version_id
+        - block_id
+        - output_id
+        - version
+        - stable_key
+        - block_type
+        - position
+        - review_status
+        - is_deleted
+        - source_refs
+        - knowledge_point_ids
+        - reuse_policy
+        - created_at
+        - created_by_type
+        - generation_task_id
+        - prompt_key
+        - prompt_version
+        - provider_type
+        - model_name
+      properties:
+        version_id: { type: string, format: uuid }
+        block_id: { type: string, format: uuid }
+        output_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        stable_key: { type: string }
+        block_type:
+          type: string
+          enum: [note, quiz, answer, teacher_tip, lesson_plan_section]
+        position: { type: integer, minimum: 0 }
+        review_status: { $ref: '#/components/schemas/ReviewStatus' }
+        is_deleted: { type: boolean }
+        title: { type: [string, 'null'] }
+        content:
+          oneOf:
+            - $ref: '#/components/schemas/BlockBody'
+            - type: 'null'
+        source_refs:
+          type: array
+          items: { $ref: '#/components/schemas/SourceRef' }
+        knowledge_point_ids:
+          type: array
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        reuse_policy: { type: string, enum: [private, project] }
+        created_at: { type: string, format: date-time }
+        created_by_type: { type: string, enum: [user, model, system, restore] }
+        generation_task_id: { type: [string, 'null'], format: uuid }
+        prompt_key: { type: [string, 'null'] }
+        prompt_version: { type: [string, 'null'] }
+        provider_type: { type: [string, 'null'], enum: [openai_compatible, azure_openai, anthropic, gemini, local, null] }
+        model_name: { type: [string, 'null'] }
+        change_summary: { type: [string, 'null'] }
+    ContentBlockPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ContentBlock' }
+        next_cursor: { type: [string, 'null'] }
+    ContentBlockVersionPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ContentBlockVersion' }
+        next_cursor: { type: [string, 'null'] }
+    BlockBody:
+      oneOf:
+        - $ref: '#/components/schemas/PlainTextBody'
+        - $ref: '#/components/schemas/MarkdownBody'
+        - $ref: '#/components/schemas/RichTextBody'
+        - $ref: '#/components/schemas/QuestionBody'
+      discriminator:
+        propertyName: format
+    PlainTextBody:
+      type: object
+      additionalProperties: false
       required: [format, content]
       properties:
-        format: { type: string, enum: [plain_text, markdown, rich_text, question] }
-        content: {}
-    SourceRef:
+        format: { const: plain_text }
+        content: { type: string, maxLength: 100000 }
+    MarkdownBody:
       type: object
-      required: [file_id, page_index]
+      additionalProperties: false
+      required: [format, content]
       properties:
+        format: { const: markdown }
+        content: { type: string, maxLength: 100000 }
+    RichTextBody:
+      type: object
+      additionalProperties: false
+      required: [format, content]
+      properties:
+        format: { const: rich_text }
+        content:
+          type: object
+          additionalProperties: false
+          required: [type, content]
+          properties:
+            type: { const: doc }
+            content:
+              type: array
+              maxItems: 2000
+              items: { type: object, additionalProperties: true }
+    QuestionBody:
+      type: object
+      additionalProperties: false
+      required: [format, content]
+      properties:
+        format: { const: question }
+        content: { $ref: '#/components/schemas/QuestionContent' }
+    QuestionContent:
+      type: object
+      additionalProperties: false
+      required: [question, type, answer, explanation, difficulty]
+      allOf:
+        - if:
+            properties:
+              type: { enum: [single_choice, multiple_choice] }
+          then:
+            required: [options]
+            properties:
+              options: { minItems: 2 }
+      properties:
+        question: { type: string, minLength: 1, maxLength: 5000 }
+        type: { type: string, enum: [single_choice, multiple_choice, true_false, fill_blank, short_answer, case_analysis] }
+        options:
+          type: array
+          maxItems: 12
+          items: { type: string, maxLength: 1000 }
+        answer:
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 5000
+            - type: array
+              minItems: 1
+              uniqueItems: true
+              items: { type: string, minLength: 1, maxLength: 1000 }
+            - type: boolean
+        explanation: { type: string, minLength: 1, maxLength: 10000 }
+        difficulty: { type: string, enum: [basic, normal, advanced] }
+        knowledge_point_id: { type: [string, 'null'], format: uuid }
+    SourceRef:
+      oneOf:
+        - $ref: '#/components/schemas/FileSourceRef'
+        - $ref: '#/components/schemas/TextSourceRef'
+      discriminator:
+        propertyName: source_kind
+    FileSourceRef:
+      type: object
+      additionalProperties: false
+      required: [source_kind, file_id, page_index]
+      properties:
+        source_kind: { const: file }
         file_id: { type: string, format: uuid }
         page_index: { type: integer, minimum: 1 }
+        quote: { type: [string, 'null'], maxLength: 500 }
+        confidence: { type: [number, 'null'], minimum: 0, maximum: 1 }
+    TextSourceRef:
+      type: object
+      additionalProperties: false
+      required: [source_kind, text_source_id]
+      dependentRequired:
+        char_start: [char_end]
+        char_end: [char_start]
+      properties:
+        source_kind: { const: source_text }
+        text_source_id: { type: string, format: uuid }
+        char_start: { type: [integer, 'null'], minimum: 0 }
+        char_end:
+          type: [integer, 'null']
+          minimum: 1
+          description: 非空时必须大于 char_start，区间左闭右开
         quote: { type: [string, 'null'], maxLength: 500 }
         confidence: { type: [number, 'null'], minimum: 0, maximum: 1 }
     UpdateContentBlockRequest:
@@ -1209,15 +2056,23 @@ components:
           type: string
           enum: [simplify, expand, change_example, change_questions, custom]
         instruction: { type: [string, 'null'], maxLength: 1000 }
+    RestoreVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_current_version]
+      properties:
+        expected_current_version: { type: integer, minimum: 1 }
     ReviewFinding:
       type: object
-      required: [id, project_id, finding_type, severity, status, message, created_at]
+      required: [id, project_id, version, finding_type, severity, status, message, created_at]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
         output_id: { type: [string, 'null'], format: uuid }
         block_id: { type: [string, 'null'], format: uuid }
         block_version: { type: [integer, 'null'], minimum: 1 }
+        context_version: { type: [integer, 'null'], minimum: 1 }
         finding_type:
           type: string
           enum: [missing_source, low_confidence_context, invalid_question_structure, answer_format_mismatch, single_choice_not_unique]
@@ -1229,13 +2084,47 @@ components:
           items: { $ref: '#/components/schemas/SourceRef' }
         created_at: { type: string, format: date-time }
         resolved_at: { type: [string, 'null'], format: date-time }
+    ReviewFindingPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReviewFinding' }
+        next_cursor: { type: [string, 'null'] }
     ResolveReviewFindingRequest:
       type: object
       additionalProperties: false
-      required: [action, expected_block_version]
+      required: [action, expected_finding_version]
+      allOf:
+        - if:
+            properties:
+              action: { const: dismissed }
+          then:
+            required: [note]
+            properties:
+              note: { type: string, minLength: 1, maxLength: 500 }
+      oneOf:
+        - required: [expected_block_version]
+          properties:
+            expected_block_version: { type: integer, minimum: 1 }
+            expected_context_version: false
+        - required: [expected_context_version]
+          properties:
+            expected_context_version: { type: integer, minimum: 1 }
+            expected_block_version: false
       properties:
         action: { type: string, enum: [confirmed, fixed, dismissed] }
-        expected_block_version: { type: integer, minimum: 1 }
+        expected_finding_version: { type: integer, minimum: 1 }
+        expected_block_version:
+          type: integer
+          minimum: 1
+          description: 块级 finding 必填；项目或上下文级 finding 必须省略
+        expected_context_version:
+          type: integer
+          minimum: 1
+          description: 项目或上下文级 finding 必填；块级 finding 必须省略
         note: { type: [string, 'null'], maxLength: 500 }
     CreateExportRequest:
       type: object
@@ -1246,20 +2135,21 @@ components:
         output_versions:
           type: array
           minItems: 1
-          items:
-            type: object
-            required: [output_id, version]
-            properties:
-              output_id: { type: string, format: uuid }
-              version: { type: integer, minimum: 1 }
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/OutputVersionReference' }
         template_key: { type: string, minLength: 1, maxLength: 100 }
     Export:
       type: object
-      required: [id, project_id, format, status, template_key, template_version, created_at]
+      required: [id, project_id, output_versions, format, status, template_key, template_version, created_at, expires_at]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
         task_id: { type: [string, 'null'], format: uuid }
+        output_versions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/OutputVersionReference' }
         format: { type: string, enum: [pdf, docx, markdown] }
         status: { type: string, enum: [queued, rendering, succeeded, failed, expired] }
         template_key: { type: string }
@@ -1270,42 +2160,192 @@ components:
         error: { oneOf: [{ $ref: '#/components/schemas/ErrorDetail' }, { type: 'null' }] }
         created_at: { type: string, format: date-time }
         completed_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
     DownloadTicket:
       type: object
       required: [download_url, expires_at]
       properties:
         download_url: { type: string, format: uri }
         expires_at: { type: string, format: date-time }
+    DeletionOperation:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, status, requested_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [queued, running, online_deleted, completed, failed, dead_lettered]
+        online_objects_deleted_at: { type: [string, 'null'], format: date-time }
+        model_details_deleted_at: { type: [string, 'null'], format: date-time }
+        backup_tombstone_recorded_at: { type: [string, 'null'], format: date-time }
+        error: { oneOf: [{ $ref: '#/components/schemas/ErrorDetail' }, { type: 'null' }] }
+        requested_at: { type: string, format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: string, format: date-time }
+    QualityFeedbackRequest:
+      type: object
+      additionalProperties: false
+      required: [output_versions, usability_rating]
+      properties:
+        output_versions:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/OutputVersionReference' }
+        usability_rating:
+          type: string
+          enum: [direct_use, minor_edit, major_edit, unusable]
+    QualityFeedback:
+      type: object
+      additionalProperties: false
+      required: [id, project_id, version, output_versions, usability_rating, before_first_export, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        output_versions:
+          type: array
+          items: { $ref: '#/components/schemas/OutputVersionReference' }
+        usability_rating:
+          type: string
+          enum: [direct_use, minor_edit, major_edit, unusable]
+        before_first_export: { type: boolean }
+        created_at: { type: string, format: date-time }
+    OutputVersionReference:
+      type: object
+      additionalProperties: false
+      required: [output_id, version]
+      properties:
+        output_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+    ClientEventBatch:
+      type: object
+      additionalProperties: false
+      required: [visit_session_id, anonymous_id, events]
+      properties:
+        visit_session_id: { type: string, format: uuid }
+        anonymous_id: { type: string, minLength: 16, maxLength: 100, writeOnly: true }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: '#/components/schemas/ClientEvent' }
+    ClientEvent:
+      type: object
+      additionalProperties: false
+      required: [event_id, event_name, occurred_at, app_version, properties]
+      properties:
+        event_id: { type: string, format: uuid }
+        event_name:
+          type: string
+          enum:
+            - quick_start_viewed
+            - sample_project_opened
+            - auth_prompt_shown
+            - auth_completed
+            - quick_start_intent_selected
+            - file_upload_started
+            - first_preview_shown
+            - paywall_shown
+        occurred_at: { type: string, format: date-time }
+        app_version: { type: string, minLength: 1, maxLength: 100 }
+        source: { type: string, maxLength: 50 }
+        experiment_ids:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, maxLength: 50 }
+        quick_start_session_id: { type: [string, 'null'], format: uuid }
+        generation_run_id: { type: [string, 'null'], format: uuid }
+        properties:
+          type: object
+          additionalProperties: false
+          maxProperties: 10
+          properties:
+            is_logged_in: { type: boolean }
+            trigger: { type: string, maxLength: 50 }
+            method: { type: string, maxLength: 50 }
+            return_source: { type: string, maxLength: 50 }
+            intent: { $ref: '#/components/schemas/Intent' }
+            file_type: { type: string, enum: [pptx, pdf] }
+            file_size_bucket: { type: string, maxLength: 30 }
+            output_type: { $ref: '#/components/schemas/OutputType' }
+            source_type: { $ref: '#/components/schemas/SourceType' }
+            time_from_ready_to_shown_ms: { type: integer, minimum: 0 }
+            plan_suggested: { type: string, maxLength: 30 }
+            sample_subject: { type: string, maxLength: 50 }
+            sample_grade: { type: string, maxLength: 50 }
+    EventBatchAccepted:
+      type: object
+      additionalProperties: false
+      required: [accepted_count, duplicate_count]
+      properties:
+        accepted_count: { type: integer, minimum: 0, maximum: 50 }
+        duplicate_count: { type: integer, minimum: 0, maximum: 50 }
     ModelProvider:
       type: object
-      required: [id, provider_type, display_name, credential_status, enabled, created_at, updated_at]
+      required: [id, provider_type, display_name, auth_type, credential_status, enabled, version, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         provider_type:
           type: string
           enum: [openai_compatible, azure_openai, anthropic, gemini, local]
         display_name: { type: string }
-        base_url: { type: [string, 'null'], format: uri }
+        base_url: { type: [string, 'null'], format: uri, pattern: '^https?://', maxLength: 2048 }
+        auth_type: { type: string, enum: [api_key, workload_identity, none] }
         credential_status: { type: string, enum: [configured, workload_identity, missing] }
         credential_last_four: { type: [string, 'null'], maxLength: 4 }
         enabled: { type: boolean }
+        version: { type: integer, minimum: 1 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+    ModelProviderPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ModelProvider' }
+        next_cursor: { type: [string, 'null'] }
     CreateModelProviderRequest:
       type: object
       additionalProperties: false
       required: [provider_type, display_name, auth_type]
+      allOf:
+        - if:
+            properties:
+              auth_type: { const: api_key }
+          then:
+            required: [api_key]
+            properties:
+              api_key: { type: string, minLength: 8, writeOnly: true }
+        - if:
+            properties:
+              auth_type: { enum: [workload_identity, none] }
+          then:
+            properties:
+              api_key: { type: 'null' }
+        - if:
+            properties:
+              provider_type: { enum: [openai_compatible, azure_openai, local] }
+          then:
+            required: [base_url]
+            properties:
+              base_url: { type: string, format: uri, pattern: '^https?://', maxLength: 2048 }
       properties:
         provider_type:
           type: string
           enum: [openai_compatible, azure_openai, anthropic, gemini, local]
         display_name: { type: string, minLength: 1, maxLength: 100 }
-        base_url: { type: [string, 'null'], format: uri }
+        base_url: { type: [string, 'null'], format: uri, pattern: '^https?://', maxLength: 2048 }
         auth_type: { type: string, enum: [api_key, workload_identity, none] }
         api_key: { type: [string, 'null'], minLength: 8, writeOnly: true }
     ModelConfig:
       type: object
-      required: [id, provider_id, display_name, model_name, capability, routing_priority, enabled]
+      required: [id, provider_id, display_name, model_name, capability, routing_priority, enabled, version, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         provider_id: { type: string, format: uuid }
@@ -1316,6 +2356,18 @@ components:
         max_output_tokens: { type: [integer, 'null'], minimum: 1 }
         temperature: { type: [number, 'null'], minimum: 0, maximum: 2 }
         enabled: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ModelConfigPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ModelConfig' }
+        next_cursor: { type: [string, 'null'] }
     CreateModelConfigRequest:
       type: object
       additionalProperties: false
@@ -1357,4 +2409,30 @@ components:
         message: { type: string }
         request_id: { type: string }
         retryable: { type: boolean }
-        details: { type: object, additionalProperties: true }
+        details:
+          description: 错误码为状态、版本或资源忙时必须匹配对应结构
+          anyOf:
+            - $ref: '#/components/schemas/InvalidStateDetails'
+            - $ref: '#/components/schemas/VersionConflictDetails'
+            - $ref: '#/components/schemas/ResourceBusyDetails'
+            - type: object
+              additionalProperties: true
+    InvalidStateDetails:
+      type: object
+      required: [current_state, allowed_actions]
+      properties:
+        current_state: { type: string }
+        allowed_actions:
+          type: array
+          items: { type: string }
+    VersionConflictDetails:
+      type: object
+      required: [expected_version, current_version]
+      properties:
+        expected_version: { type: integer, minimum: 1 }
+        current_version: { type: integer, minimum: 1 }
+    ResourceBusyDetails:
+      type: object
+      required: [active_task_id]
+      properties:
+        active_task_id: { type: string, format: uuid }

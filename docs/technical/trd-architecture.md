@@ -16,7 +16,7 @@
 | `apps/web` | 教师端、学生分享页、管理端页面和交互 |
 | `apps/api` | 业务 API、权限、会话、任务调度入口 |
 | `apps/worker` | 文件解析、生成、渲染、导出等长任务 |
-| `apps/agent` | AI 助手编排，不直接修改核心业务数据 |
+| `apps/agent` | 后期 AI 助手编排骨架；MVP-A 不部署、不成为运行依赖 |
 | `packages/domain` | 核心领域类型与业务规则 |
 | `packages/course-ir` | 课程结构、知识点、来源引用等数据模型 |
 | `packages/parser` | PPTX/PDF/DOCX/Markdown/OCR 解析 |
