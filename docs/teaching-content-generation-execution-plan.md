@@ -1,5 +1,7 @@
 # 教学课件智能生成系统执行文档（PRD + TRD 融合版）
 
+> **拆分说明（2026-06-26）**：本文保留为 PRD + TRD 融合总稿。后续协作请优先阅读 [docs/README.md](README.md)，并在 `product/`、`technical/`、`execution/`、`reference/`、`adr/` 中维护对应职责的分层文档。
+
 ## 1. 文档信息
 
 | 项目 | 内容 |
